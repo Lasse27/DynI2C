@@ -1,11 +1,16 @@
 {
     "name": "ModCon",
     "version": "1.0.0",
-    "description": "I2C-based protocol that allows to read data fields with dynamic length from I2C-slave devices.",
-    "license": "MIT License",
+    "description": "I2C-based protocol that allows the I2C-master to read data fields with dynamic lengths from I2C-slave devices.",
     "authors": {
         "name": "Lasse-Leander Hillen",
         "email": "lassehillen@gmx.de",
         "maintainer": true
+    },
+    "license": "MIT License",
+    "homepage": "https://github.com/Lasse27/ModCon",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/Lasse27/ModCon.git"
     }
 }
