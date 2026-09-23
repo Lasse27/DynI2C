@@ -1,7 +1,7 @@
 {
-    "name": "ModCon",
+    "name": "Dynamic I2C",
     "version": "1.0.0",
-    "description": "I2C-based protocol that allows the I2C-master to read data fields with dynamic lengths from I2C-slave devices.",
+    "description": "I2C-based protocol that allows the DynI2C-master-device to read data fields with dynamic lengths from DynI2C-slave devices.",
     "authors": {
         "name": "Lasse-Leander Hillen",
         "email": "lassehillen@gmx.de",
