@@ -14,11 +14,28 @@
 #include "esp_log.h"
 #include "esp_check.h"
 #include "driver/i2c_master.h"
+#include "DynI2CPackets.h"
 
-#define DYNI2C_MAGIC_NUMBER 0xC4
-#define DYNI2C_MAX_DATA_LEN 1024
 
-uint8_t calculate_crc8(const uint8_t *data, size_t len)
+ /**
+  * @brief Enumeration of the different flags that are specified in the header of the packets
+  * that are being sent.
+  */
+typedef enum : uint8_t
+{
+    DYNAMIC_FLAG = (1 << 0),    // Flags and data lenght vary, DONT CACHE
+    READABLE_FLAG = (1 << 1),   // Register can be read
+    WRITABLE_FLAG = (1 << 2),   // Register can be written
+    TYPE_BLOB_FLAG = (1 << 3),  // Register contains unspecified bytes.
+    TYPE_BOOL_FLAG = (1 << 4),  // Register contains boolean.
+    TYPE_UINT_FLAG = (1 << 5),  // Register contains unsigned integer.
+    TYPE_INT_FLAG = (1 << 6),   // Register contains signed integer.
+    TYPE_FLOAT_FLAG = (1 << 7), // Register contains floating point number.
+} dynI2C_data_flag_t;
+
+
+
+inline uint8_t calculate_crc8(const uint8_t* data, size_t len)
 {
     uint8_t crc = 0x00;
     for (size_t i = 0; i < len; i++)
@@ -35,107 +52,63 @@ uint8_t calculate_crc8(const uint8_t *data, size_t len)
     return crc;
 }
 
-uint8_t calculate_crc8(dynI2C_getmeta_packet_t packet)
+inline uint8_t calculate_crc8(dynI2C_getmeta_packet_t packet)
 {
-    return calculate_crc8(reinterpret_cast<const uint8_t *>(&packet),
-                          sizeof(packet) - sizeof(packet.crc_checksum));
+    return calculate_crc8(reinterpret_cast<const uint8_t*>(&packet),
+        sizeof(packet) - sizeof(packet.crc_checksum));
 }
 
-uint8_t calculate_crc8(dynI2C_meta_packet_t packet)
+inline uint8_t calculate_crc8(dynI2C_metamsg_packet_t packet)
 {
-    return calculate_crc8(reinterpret_cast<const uint8_t *>(&packet),
-                          sizeof(packet) - sizeof(packet.crc_checksum));
+    return calculate_crc8(reinterpret_cast<const uint8_t*>(&packet),
+        sizeof(packet) - sizeof(packet.crc_checksum));
 }
 
-uint8_t calculate_crc8(dynI2C_getdata_packet_t packet)
+inline uint8_t calculate_crc8(dynI2C_getdata_packet_t packet)
 {
-    return calculate_crc8(reinterpret_cast<const uint8_t *>(&packet),
-                          sizeof(packet) - sizeof(packet.crc_checksum));
+    return calculate_crc8(reinterpret_cast<const uint8_t*>(&packet),
+        sizeof(packet) - sizeof(packet.crc_checksum));
 }
 
-uint8_t calculate_crc8(dynI2C_data_packet_t packet)
+inline uint8_t calculate_crc8(dynI2C_setdata_packet_t packet)
 {
-    return calculate_crc8(reinterpret_cast<const uint8_t *>(&packet),
-                          sizeof(packet) - sizeof(packet.crc_checksum));
+    return calculate_crc8(reinterpret_cast<const uint8_t*>(&packet),
+        sizeof(packet) - sizeof(packet.crc_checksum));
 }
 
-uint8_t calculate_crc8(dynI2C_setdata_packet_t packet)
+
+/**
+ * @brief Creates a GETMETA packet for a specific data key.
+ * @param key The uint8_t key for the data to access.
+ * @return A struct of type dynI2C_getmeta_packet_t
+ */
+inline dynI2C_getmeta_packet_t build_getmeta_packet(uint8_t key)
 {
-    return calculate_crc8(reinterpret_cast<const uint8_t *>(&packet),
-                          sizeof(packet) - sizeof(packet.crc_checksum));
+    dynI2C_getmeta_packet_t packet = {
+        .header = {
+            .magic = DYNI2C_MAGIC_NUMBER,
+            .packet_type = GETMETA,
+        },
+        .data_key = key,
+    };
+    packet.crc_checksum = calculate_crc8(packet);
+    return packet;
 }
 
-typedef enum : uint8_t // Enum that represents the different possible packet types.
+/// @brief Creates a GETDATA packet for a specific data key.
+/// @param key The uint8_t key for the data to access.
+/// @return A struct of type dynI2C_getdata_packet_t
+inline dynI2C_getdata_packet_t build_getdata_packet(uint8_t key)
 {
-    GETMETA = 0x00,
-    GETDATA = 0x01,
-    SETDATA = 0x02,
-
-    META = 0x03,
-    DATA = 0x04,
-} packet_type_t;
-
-typedef enum : uint8_t
-{
-    DYNAMIC_SIZE_FLAG = (1 << 0)
-} data_flag_t;
-
-typedef struct __attribute__((packed)) // Structure that represents a DynI2C Header packet.
-{
-    uint8_t magic = DYNI2C_MAGIC_NUMBER;
-    packet_type_t packet_type;
-} dynI2C_header_t;
-
-typedef struct __attribute__((packed)) // Structure that represents meta data of a field.
-{
-    uint16_t data_len;                 // Length of the contained data
-    uint8_t data[DYNI2C_MAX_DATA_LEN]; // Contained data
-} dynI2C_data_t;
-
-typedef struct __attribute__((packed)) // Structure that represents meta data of a field.
-{
-    uint8_t data_flags; // Bit flags of the data field.
-    uint16_t data_len;  // Length of the contained data
-} dynI2C_meta_t;
-
-/* ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
- * Definitions of the different packets
- * ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++ */
-
-typedef struct __attribute__((packed)) // Structure that represents a GETMETA DynI2C packet.
-{
-    dynI2C_header_t header; // Header of the package
-    uint8_t data_key;       // Key whose meta data is being requested
-    uint8_t crc_checksum;   // Footer of the package
-} dynI2C_getmeta_packet_t;
-
-typedef struct __attribute__((packed)) // Structure that represents a META DynI2C packet.
-{
-    dynI2C_header_t header; // Header of the package
-    dynI2C_meta_t meta;     // Meta data of a field
-    uint8_t crc_checksum;   // Footer of the package
-} dynI2C_meta_packet_t;
-
-typedef struct __attribute__((packed)) //  Structure that represents a GETDATA DynI2C packet.
-{
-    dynI2C_header_t header; // Header of the package
-    uint8_t data_key;       // Key whose data is being requested
-    uint8_t crc_checksum;   // Footer of the package
-} dynI2C_getdata_packet_t;
-
-typedef struct __attribute__((packed)) //  Structure that represents a GETDATA DynI2C packet.
-{
-    dynI2C_header_t header; // Header of the package
-    uint8_t data_key;       // Key whose data is being send
-    dynI2C_data_t data;     // Contained data
-    uint8_t crc_checksum;   // Footer of the package
-} dynI2C_setdata_packet_t;
-
-typedef struct __attribute__((packed)) // Structure that represents a DATA DynI2C packet.
-{
-    dynI2C_header_t header;            // Header of the package
-    uint8_t data[DYNI2C_MAX_DATA_LEN]; // Contained data
-    uint8_t crc_checksum;              // Footer of the package
-} dynI2C_data_packet_t;
+    dynI2C_getdata_packet_t packet = {
+        .header = {
+            .magic = DYNI2C_MAGIC_NUMBER,
+            .packet_type = GETDATA,
+        },
+        .data_key = key,
+    };
+    packet.crc_checksum = calculate_crc8(packet);
+    return packet;
+}
 
 #endif // DYNI2C_COMMON_H

@@ -68,64 +68,29 @@ dynI2C_master_cfg_t default_dynI2C_master_cfg()
 /// @brief Represents a map entry for a DynI2C Client of this DynI2CMaster
 typedef struct
 {
-    i2c_master_dev_handle_t handle;
+    i2c_master_dev_handle_t device_handle;
     std::map<uint8_t, dynI2C_meta_t> metadata;
 } dynI2C_client_entry_t;
 
 class DynI2CMaster
 {
 public:
-    /// @brief Destructs the DynI2CMaster instance;
     ~DynI2CMaster();
-
-    /// @brief Initializes the DynI2CMaster. Sets up I2C master bus. Fails with ESP_ERROR_CHECK if faulted.
-    /// @param config Configuration parameters for the DynI2CMaster.
     void init(dynI2C_master_cfg_t config);
-
-    /// @brief Deinitializes the DynI2CMaster. Clears device handles and master bus.
-    ///        Fails with ESP_ERROR_CHECK if faulted.
     void deinit();
-
-    /// @brief Requests meta information about a field of a DynI2C-Client.
-    /// @param address The id of the client to address.
-    /// @param key            The key of the field to address.
-    /// @param response       A pointer to the read response.
-    /// @return               ESP_OK if the execution worked, another esp_err_t-Value otherwise.
-    esp_err_t get_meta(uint8_t address, uint8_t key, dynI2C_meta_t *metadata);
-
-    /// @brief Requests data from a field of a DynI2C-Client. Calls get_meta if the address-key-combination is not cached in the instance.
-    /// @param address        The id of the client to address.
-    /// @param key            The key of the field to address.
-    /// @param response       A pointer to the read response.
-    /// @return               ESP_OK if the execution worked, another esp_err_t-Value otherwise.
-    esp_err_t get_data(uint8_t address, uint8_t key, dynI2C_data_t *response);
-
-    /// @brief Requests data from a field of a DynI2C-Client.
-    /// @param address        The id of the client to address.
-    /// @param key            The key of the field to address.
-    /// @param data_len       The length of the data field, which is read.
-    /// @param response       A pointer to the read response.
-    /// @return               ESP_OK if the execution worked, another esp_err_t-Value otherwise.
-    esp_err_t get_data(uint8_t address, uint8_t key, uint16_t data_len, dynI2C_data_t *response);
+    esp_err_t get_meta(uint8_t address, uint8_t key, dynI2C_meta_t& metadata);
+    esp_err_t get_data(uint8_t address, uint8_t key, std::vector<uint8_t>& data);
+    esp_err_t get_data(uint8_t address, uint8_t key, dynI2C_meta_t metadata, std::vector<uint8_t>& data);
+    esp_err_t register_client(uint8_t address);
 
 private:
-    /// @brief Shows wether the method init was already called.
     bool initialized;
-
-    /// @brief Config that the master was initialized with.
     dynI2C_master_cfg_t config;
-
-    /// @brief I2C-bus that is used to interact with the DynI2C clients.
     i2c_master_bus_handle_t i2c_bus_handle;
-
-    /// @brief Map of map that contains already acquired metadata of client fields
     std::map<uint8_t, dynI2C_client_entry_t> client_entries;
-
-    esp_err_t create_dynamic_i2c_device(uint8_t address, i2c_master_dev_handle_t *device_handle);
-
-    esp_err_t transceive_metadata_with_client(i2c_master_dev_handle_t handle, uint8_t key, dynI2C_meta_packet_t *response);
-    
-    esp_err_t transceive_data_with_client(i2c_master_dev_handle_t handle, uint8_t key, dynI2C_data_packet_t *response);
+    esp_err_t register_i2c_device(uint8_t address, i2c_master_dev_handle_t* device_handle);
+    esp_err_t transceive_metadata_with_client(i2c_master_dev_handle_t device_handle, uint8_t key, dynI2C_meta_t& metadata);
+    esp_err_t transceive_data_with_client(i2c_master_dev_handle_t device_handle, uint8_t key, dynI2C_meta_t& metadata, std::vector<uint8_t>& data);
 };
 
 #endif // DYNI2C_MASTER_H
