@@ -17,7 +17,7 @@ DynI2CMaster::~DynI2CMaster()
  *
  * @param config   `dynI2C_master_cfg_t` that holds the configuration to apply to the `DynI2CMaster`.
  */
-void DynI2CMaster::init(dynI2C_master_cfg_t config)
+void DynI2CMaster::init(const dynI2C_master_cfg_t& config)
 {
     if (initialized)
         deinit();
@@ -38,8 +38,8 @@ void DynI2CMaster::init(dynI2C_master_cfg_t config)
     ESP_LOGD(TAG, "I2C master bus successfully initialized.");
 
     // Save used config in instance.
-    config = config;
-    initialized = true;
+    this->config = config;
+    this->initialized = true;
 }
 
 /**
@@ -68,115 +68,16 @@ void DynI2CMaster::deinit()
     i2c_bus_handle = nullptr;
 
     // Clear config
-    config = {};
-    initialized = false;
+    this->config = {};
+    this->initialized = false;
     ESP_LOGD(TAG, "I2C master bus successfully deinitialized.");
 }
 
-/**
- * @brief Acquires the metadata for a specific address/client and key. Dynamically registers a I2C client if address was
- * never requested before. If specific address/client and key were requested before, only a std::map lookup is done to
- * acquire the metadata. Otherwise the metadata is requested via I2C from client and cached for later lookup.
- *
- * @param address The I2C address of the client that holds the required metadata.
- * @param key The key of the register that the metadata is required from.
- * @param metadata Contains the read metadata after successfull execution of this function.
- * @return Returns `ESP_OK` if on successfull execution, otherwise a different error code.
- */
-esp_err_t DynI2CMaster::get_meta(uint8_t address, uint8_t key, dynI2C_meta_t& metadata)
-{
-    // If instance was not initialized we show exception and fail.
-    if (!initialized)
-    {
-        ESP_LOGE(TAG, "Failed to request meta data. DynI2C-Master was not intialized.");
-        return ESP_ERR_INVALID_STATE;
-    }
+/* =========================================================
+ * The following function act as the foundatation for all other methods
+ * ========================================================= */
 
-    esp_err_t error = register_client(address);
-
-    // Get entry and check if there is metadata in the entry for the wanted key
-    dynI2C_client_entry_t& client_entry = client_entries.at(address);
-    auto meta_it = client_entry.metadata.find(key);
-    if (meta_it != client_entry.metadata.end())
-    {
-        // Key was found so just return the cached metadata
-        metadata = meta_it->second;
-        return ESP_OK;
-    }
-
-    // Key was not found, so we have to request it from the client.
-    esp_err_t error = transceive_metadata_with_client(client_entry.device_handle, key, metadata);
-    if (error != ESP_OK)
-        return error;
-
-    // Only if the dynamic size flag is not set, we cache the response metadata
-    if (!(metadata.data_flags & DYNAMIC_FLAG))
-        client_entry.metadata[key] = metadata;
-
-    return ESP_OK;
-}
-
-/**
- * @brief Acquires the data for a specific address/client and key over I2C. Calls `get_meta` to acquire the metadata for the
- * required register and therefore maybe performs additional I2C-transactions.
- *
- * @param address The I2C address of the client that holds the required data.
- * @param key The key of the register that the data is required from.
- * @param data Contains the read data after successfull execution of this function.
- * @return Returns `ESP_OK` if on successfull execution, otherwise a different error code.
- */
-esp_err_t DynI2CMaster::get_data(uint8_t address, uint8_t key, std::vector<uint8_t>& data)
-{
-    // If instance was not initialized we show exception and fail.
-    if (!initialized)
-    {
-        ESP_LOGE(TAG, "Failed to request meta data. DynI2C-Master was not intialized.");
-        return ESP_ERR_INVALID_STATE;
-    }
-
-    // Get metadata from cache or request from client device
-    dynI2C_meta_t metadata;
-    esp_err_t error = get_meta(address, key, metadata);
-    if (error != ESP_OK)
-        return error;
-
-    // Send request to client and get data result
-    dynI2C_client_entry_t& client_entry = client_entries.at(address);
-    return transceive_data_with_client(client_entry.device_handle, key, metadata, data);
-}
-
-/**
- * @brief Acquires the data for a specific address/client and key over I2C.
- *
- * @param address The I2C address of the client that holds the required data.
- * @param key The key of the register that the data is required from.
- * @param metadata Metadata for the register that the data is required from.
- * @param data Contains the read data after successfull execution of this function.
- * @return Returns `ESP_OK` if on successfull execution, otherwise a different error code.
- */
-esp_err_t DynI2CMaster::get_data(uint8_t address, uint8_t key, dynI2C_meta_t metadata, std::vector<uint8_t>& data)
-{
-    // If instance was not initialized we show exception and fail.
-    if (!initialized)
-    {
-        ESP_LOGE(TAG, "Failed to request meta data. DynI2C-Master was not intialized.");
-        return ESP_ERR_INVALID_STATE;
-    }
-
-    // Send request to client and get data result
-    register_client(address);
-    dynI2C_client_entry_t& client_entry = client_entries.at(address);
-    return transceive_data_with_client(client_entry.device_handle, key, metadata, data);
-}
-
-/**
- * @brief Registers a client in the client cache and creates the device handle for i2c communication. If the clients address is
- * already registered, this method does nothing.
- *
- * @param address The I2C-address of the new client that is registered.
- * @return Returns `ESP_OK` if on successfull execution, otherwise a different error code.
- */
-esp_err_t DynI2CMaster::register_client(uint8_t address)
+esp_err_t DynI2CMaster::_register_client(uint8_t address)
 {
     // Check if the client has not been accessed before
     auto it = client_entries.find(address);
@@ -184,7 +85,7 @@ esp_err_t DynI2CMaster::register_client(uint8_t address)
     {
         // If not create client device_handle and sub_map for new client.
         i2c_master_dev_handle_t device_handle = nullptr;
-        esp_err_t error = register_i2c_device(address, &device_handle);
+        esp_err_t error = _register_i2c_device(address, &device_handle);
         if (error != ESP_OK)
             return error;
 
@@ -198,20 +99,17 @@ esp_err_t DynI2CMaster::register_client(uint8_t address)
     return ESP_OK;
 }
 
-/**
- * @brief Creates the device handle for i2c communication and adds the device to the i2c bus.
- *
- * @param address The I2C-address of the new client that is registered.
- * @return Returns `ESP_OK` if on successfull execution, otherwise a different error code.
- */
-esp_err_t DynI2CMaster::register_i2c_device(uint8_t address, i2c_master_dev_handle_t* device_handle)
+
+esp_err_t DynI2CMaster::_register_i2c_device(uint8_t address, i2c_master_dev_handle_t* device_handle)
 {
     // Create device config
-    i2c_device_config_t device_config = {
+    i2c_device_config_t device_config =
+    {
         .dev_addr_length = I2C_ADDR_BIT_LEN_7,
         .device_address = address,
         .scl_speed_hz = config.scl_speed_hz,
-        .scl_wait_us = config.timeout_ms };
+        .scl_wait_us = config.timeout_ms
+    };
 
     // Add i2c device to bus
     esp_err_t error = i2c_master_bus_add_device(i2c_bus_handle, &device_config, device_handle);
@@ -221,107 +119,444 @@ esp_err_t DynI2CMaster::register_i2c_device(uint8_t address, i2c_master_dev_hand
     return error;
 }
 
-/**
- * @brief Runs an i2c interaction with the i2c client to obtain metadata information for a specified register.
- * @param device_handle The i2c device handle of the client that is spoken to.
- * @param key The key for the register whose metadata is required.
- * @param metadata Contains the read metadata after successfull execution of this function.
- * @return Returns `ESP_OK` if on successfull execution, otherwise a different error code.
- */
-esp_err_t DynI2CMaster::transceive_metadata_with_client(i2c_master_dev_handle_t device_handle, uint8_t key, dynI2C_meta_t& metadata)
+
+esp_err_t DynI2CMaster::_transmit_getmeta_to_client(const dynI2C_client_entry_t& client, uint8_t key)
 {
-    // Build request for client device
-    dynI2C_getmeta_packet_t request = build_getmeta_packet(key);
+    dynI2C_getmeta_packet_t packet = build_getmeta_packet(key); // Build packet
+    const uint8_t* transmit_buffer = reinterpret_cast<const uint8_t*>(&packet);
 
-    // Build transmit and response buffers
-    dynI2C_metamsg_packet_t response;
-    const uint8_t* tx = reinterpret_cast<const uint8_t*>(&request);
-    uint8_t* rx = reinterpret_cast<uint8_t*>(&response);
-
-    // Send request at most 3 times to client.
-    for (uint8_t attempt = 0; attempt < 3; ++attempt)
-    {
-        // Transceive metadata from client
-        esp_err_t error = i2c_master_transmit_receive(
-            device_handle,
-            tx,
-            sizeof(request),
-            rx,
-            sizeof(response),
-            config.timeout_ms);
-
-        if (error != ESP_OK)
-        {
-            ESP_LOGE(TAG, "Failes to transceive meta from client.");
-            return error;
-        }
-
-        // Compare checksums
-        if (response.crc_checksum != calculate_crc8(response))
-        {
-            ESP_LOGW(TAG, "Checksum mismatch, retrying!");
-            continue;
-        }
-
-        metadata = response.meta;
-        return ESP_OK;
-    }
-
-    ESP_LOGE(TAG, "Continuous checksum mismatch. Reached maximum retries.");
-    return ESP_ERR_INVALID_RESPONSE;
+    return i2c_master_transmit(
+        client.device_handle,
+        transmit_buffer,
+        sizeof(packet),
+        config.timeout_ms
+    );
 }
 
-/**
- * @brief Runs an i2c interaction with the i2c client to obtain data for a specified register.
- * @param device_handle The i2c device handle of the client that is spoken to.
- * @param key The key for the register whose metadata is required.
- * @param metadata Metadata for the register that the data is required from.
- * @param data Contains the read data after successfull execution of this function.
- * @return Returns `ESP_OK` if on successfull execution, otherwise a different error code.
- */
-esp_err_t DynI2CMaster::transceive_data_with_client(i2c_master_dev_handle_t device_handle, uint8_t key, dynI2C_meta_t& metadata, std::vector<uint8_t>& data)
+esp_err_t DynI2CMaster::_receive_metadata_from_client(const dynI2C_client_entry_t& client, dynI2C_metadata_t* metadata)
 {
-    // Build request for client device
-    dynI2C_getdata_packet_t request = build_getdata_packet(key);
+    dynI2C_metamsg_packet_t packet = {};
+    uint8_t* response_buffer = reinterpret_cast<uint8_t*>(&packet);
 
-    // Build response buffer
-    uint16_t rx_size = sizeof(dynI2C_header_t) + metadata.data_len + sizeof(uint8_t);
-    std::vector<uint8_t> rx(rx_size);
+    // Receive status response from client
+    esp_err_t error = i2c_master_receive(
+        client.device_handle,
+        response_buffer,
+        sizeof(packet),
+        config.timeout_ms
+    );
+    // Check error code from driver
+    if (error != ESP_OK)
+        return error;
 
-    // Send request at most 3 times to client.
-    for (uint8_t attempt = 0; attempt < 3; ++attempt)
+    // Check packet for valid bytes
+    if (packet.magic != DYNI2C_MAGIC_NUMBER)
     {
-        // Transceive metadata from client
-        esp_err_t error = i2c_master_transmit_receive(
-            device_handle,
-            reinterpret_cast<const uint8_t*>(&request),
-            sizeof(request),
-            rx.data(),
-            rx_size,
-            config.timeout_ms);
+        ESP_LOGE(TAG, "Invalid magic number in METAMSG, trying again...");
+        return ESP_ERR_INVALID_CRC;
+    }
+    uint8_t expected_crc = calculate_crc8(packet);
+    if (packet.crc_checksum != expected_crc)
+    {
+        ESP_LOGE(TAG, "CRC mismatch, trying again...");
+        return ESP_ERR_INVALID_CRC;
+    }
+    if (packet.packet_type != DYNI2C_PACKET_TYPE_METAMSG)
+    {
+        ESP_LOGE(TAG, "Invalid packet type, expected METAMSG, got %d", packet.packet_type);
+        return ESP_ERR_INVALID_RESPONSE;
+    }
 
+    metadata->data_flags = packet.data_flags;
+    metadata->data_len = packet.data_len;
+    return ESP_OK;
+}
+
+
+esp_err_t DynI2CMaster::_get_metadata_from_client(
+    const dynI2C_client_entry_t& client,
+    uint8_t data_key,
+    dynI2C_metadata_t* metadata,
+    uint8_t max_retries = 3,
+    uint8_t delay_ms = 3)
+{
+    esp_err_t error = ESP_FAIL;
+    for (uint8_t i = 0; i < max_retries; i++)
+    {
+        // Transmit request to client with client-handle from paramters
+        error = _transmit_getmeta_to_client(client, data_key);
         if (error != ESP_OK)
         {
-            ESP_LOGE(TAG, "Failed to transceive data from client.");
-            return error;
-        }
-
-        // Get checksum that was transmitted
-        const uint8_t received_crc = rx.back();
-        rx.pop_back();
-
-        // Compare checksums
-        if (received_crc != calculate_crc8(rx.data(), rx.size()))
-        {
-            ESP_LOGW(TAG, "Checksum mismatch, retrying!");
+            ESP_LOGW(TAG, "Failed to transmit GETMETA packet to client (attempt %d/%d): %s", i + 1, max_retries, esp_err_to_name(error));
             continue;
         }
 
-        rx.erase(rx.begin(), rx.begin() + sizeof(dynI2C_header_t));
-        data = std::move(rx);
+        // If request was transmitted, wait a tiny bit
+        vTaskDelay(pdMS_TO_TICKS(delay_ms));
+
+        // Receive response and write it into data vector reference
+        error = _receive_metadata_from_client(client, metadata);
+        if (error != ESP_OK)
+        {
+            ESP_LOGW(TAG, "Failed to receive DATAMSG packet from client (attempt %d/%d): %s", i + 1, max_retries, esp_err_to_name(error));
+            continue;
+        }
+        return ESP_OK;
+    }
+    return error;
+}
+
+
+esp_err_t DynI2CMaster::_transmit_getdata_to_client(const dynI2C_client_entry_t& client, uint8_t key)
+{
+    dynI2C_getmeta_packet_t packet = build_getdata_packet(key); // Build packet
+    const uint8_t* transmit_buffer = reinterpret_cast<const uint8_t*>(&packet);
+
+    return i2c_master_transmit(
+        client.device_handle,
+        transmit_buffer,
+        sizeof(packet),
+        config.timeout_ms
+    );
+}
+
+
+esp_err_t DynI2CMaster::_receive_data_from_client(const dynI2C_client_entry_t& client, uint16_t data_len, std::vector<uint8_t>& data)
+{
+    size_t response_buffer_size = sizeof(uint8_t) * 3 + data_len;
+    uint8_t response_buffer[response_buffer_size];
+
+    // Receive status response from client
+    esp_err_t error = i2c_master_receive(
+        client.device_handle,
+        response_buffer,
+        response_buffer_size,
+        config.timeout_ms
+    );
+    // Check error code from driver
+    if (error != ESP_OK)
+        return error;
+
+    // Check packet for valid bytes
+    if (response_buffer[0] != DYNI2C_MAGIC_NUMBER)
+    {
+        ESP_LOGE(TAG, "Invalid magic number in DATAMSG, trying again...");
+        return ESP_ERR_INVALID_CRC;
+    }
+    uint8_t expected_crc = calculate_crc8(response_buffer, response_buffer_size - 1);
+    if (response_buffer[response_buffer_size - 1] != expected_crc)
+    {
+        ESP_LOGE(TAG, "CRC mismatch, trying again...");
+        return ESP_ERR_INVALID_CRC;
+    }
+    if (response_buffer[1] != DYNI2C_PACKET_TYPE_DATAMSG)
+    {
+        ESP_LOGE(TAG, "Invalid packet type, expected DATAMSG, got %d", response_buffer[1]);
+        return ESP_ERR_INVALID_RESPONSE;
+    }
+
+    // Resize vector that will hold the function output
+    data.resize(data_len);
+
+    // Return data content from buffer
+    memcpy(data.data(), &response_buffer[2], data_len);
+    return ESP_OK;
+}
+
+
+esp_err_t DynI2CMaster::_get_data_from_client(
+    const dynI2C_client_entry_t& client,
+    uint8_t data_key,
+    uint16_t data_len,
+    std::vector<uint8_t>& data,
+    uint8_t max_retries = 3,
+    uint8_t delay_ms = 3)
+{
+    esp_err_t error = ESP_FAIL;
+    for (uint8_t i = 0; i < max_retries; i++)
+    {
+        // Transmit request to client with client-handle from paramters
+        error = _transmit_getdata_to_client(client, data_key);
+        if (error != ESP_OK)
+        {
+            ESP_LOGW(TAG, "Failed to transmit GETDATA packet to client (attempt %d/%d): %s", i + 1, max_retries, esp_err_to_name(error));
+            continue;
+        }
+
+        // If request was transmitted, wait a tiny bit
+        vTaskDelay(pdMS_TO_TICKS(delay_ms));
+
+        // Receive response and write it into data vector reference
+        error = _receive_data_from_client(client, data_len, data);
+        if (error != ESP_OK)
+        {
+            ESP_LOGW(TAG, "Failed to receive DATAMSG packet from client (attempt %d/%d): %s", i + 1, max_retries, esp_err_to_name(error));
+            continue;
+        }
+        return ESP_OK;
+    }
+    return error;
+}
+
+
+/* =========================================================
+ * The following function act as the intermediate functions for the exported functions
+ * ========================================================= */
+
+esp_err_t DynI2CMaster::_get_client_id(const dynI2C_client_entry_t& client, uint8_t* id)
+{
+    if (id == nullptr) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    std::vector<uint8_t> register_data;
+    esp_err_t error = _get_data_from_client(client, DYNI2C_CLIENT_REGISTER_ID, 1, register_data);
+    if (error != ESP_OK)
+    {
+        ESP_LOGW(TAG, "Failed to get id from client: %s", esp_err_to_name(error));
+        return error;
+    }
+    *id = register_data[0];
+    return ESP_OK;
+}
+
+
+esp_err_t DynI2CMaster::_get_client_error(const dynI2C_client_entry_t& client, uint8_t* error_code)
+{
+    if (error_code == nullptr) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    std::vector<uint8_t> register_data;
+    esp_err_t error = _get_data_from_client(client, DYNI2C_CLIENT_REGISTER_ERROR, 1, register_data);
+    if (error != ESP_OK)
+    {
+        ESP_LOGW(TAG, "Failed to get error from client: %s", esp_err_to_name(error));
+        return error;
+    }
+    *error_code = register_data[0];
+    return ESP_OK;
+}
+
+
+esp_err_t DynI2CMaster::_get_client_status(const dynI2C_client_entry_t& client, uint8_t* status)
+{
+    if (status == nullptr) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    std::vector<uint8_t> register_data;
+    esp_err_t error = _get_data_from_client(client, DYNI2C_CLIENT_REGISTER_STATUS, 1, register_data);
+    if (error != ESP_OK)
+    {
+        ESP_LOGW(TAG, "Failed to get status from client: %s", esp_err_to_name(error));
+        return error;
+    }
+    *status = register_data[0];
+    return ESP_OK;
+}
+
+
+esp_err_t DynI2CMaster::_get_client_register_count(const dynI2C_client_entry_t& client, uint8_t* count)
+{
+    if (count == nullptr) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    std::vector<uint8_t> register_data;
+    esp_err_t error = _get_data_from_client(client, DYNI2C_CLIENT_REGISTER_COUNT, 1, register_data);
+    if (error != ESP_OK)
+    {
+        ESP_LOGW(TAG, "Failed to get register count from client: %s", esp_err_to_name(error));
+        return error;
+    }
+    *count = register_data[0];
+    return ESP_OK;
+}
+
+
+esp_err_t DynI2CMaster::_get_client_version(const dynI2C_client_entry_t& client, uint8_t* version)
+{
+    if (version == nullptr) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    std::vector<uint8_t> register_data;
+    esp_err_t error = _get_data_from_client(client, DYNI2C_CLIENT_REGISTER_VERSION, 3, register_data);
+    if (error != ESP_OK)
+    {
+        ESP_LOGW(TAG, "Failed to get version from client: %s", esp_err_to_name(error));
+        return error;
+    }
+    version[0] = register_data[0];
+    version[1] = register_data[1];
+    version[2] = register_data[2];
+    return ESP_OK;
+}
+
+
+esp_err_t DynI2CMaster::_get_client_boot_id(const dynI2C_client_entry_t& client, uint8_t* boot_id)
+{
+    if (boot_id == nullptr) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    std::vector<uint8_t> register_data;
+    esp_err_t error = _get_data_from_client(client, DYNI2C_CLIENT_REGISTER_BOOTID, 2, register_data);
+    if (error != ESP_OK)
+    {
+        ESP_LOGW(TAG, "Failed to get version from client: %s", esp_err_to_name(error));
+        return error;
+    }
+    boot_id[0] = register_data[0];
+    boot_id[1] = register_data[1];
+    return ESP_OK;
+}
+
+esp_err_t DynI2CMaster::_preflight(uint8_t address)
+{
+    // If instance was not initialized we show exception and fail.
+    if (!initialized)
+    {
+        ESP_LOGE(TAG, "Failed to request data. DynI2C-Master was not intialized.");
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    // Register client (does only a check if already registered)
+    esp_err_t error = _register_client(address);
+    if (error != ESP_OK)
+    {
+        ESP_LOGE(TAG, "Failed to register DynI2C-Client.");
+        return error;
+    }
+    return ESP_OK;
+}
+
+
+/* Top level functions called by the user
+ * ========================================================= */
+
+esp_err_t DynI2CMaster::get_error(uint8_t address, uint8_t* error_code)
+{
+    // Common checks for data access
+    esp_err_t error = _preflight(address);
+    if (error != ESP_OK)
+        return error;
+
+    // Get client entry and call intermediate method
+    dynI2C_client_entry_t& client_entry = client_entries.at(address);
+    return _get_client_error(client_entry, error_code);
+}
+
+
+esp_err_t DynI2CMaster::get_status(uint8_t address, uint8_t* status)
+{
+    // Common checks for data access
+    esp_err_t error = _preflight(address);
+    if (error != ESP_OK)
+        return error;
+
+    // Get client entry and call intermediate method
+    dynI2C_client_entry_t& client_entry = client_entries.at(address);
+    return _get_client_status(client_entry, status);
+}
+
+
+esp_err_t DynI2CMaster::get_register_count(uint8_t address, uint8_t* register_count)
+{
+    // Common checks for data access
+    esp_err_t error = _preflight(address);
+    if (error != ESP_OK)
+        return error;
+
+    // Get client entry and call intermediate method
+    dynI2C_client_entry_t& client_entry = client_entries.at(address);
+    return _get_client_register_count(client_entry, register_count);
+}
+
+
+esp_err_t DynI2CMaster::get_id(uint8_t address, uint8_t* device_id)
+{
+    // Common checks for data access
+    esp_err_t error = _preflight(address);
+    if (error != ESP_OK)
+        return error;
+
+    // Get client entry and call intermediate method
+    dynI2C_client_entry_t& client_entry = client_entries.at(address);
+    return _get_client_id(client_entry, device_id);
+}
+
+
+esp_err_t DynI2CMaster::get_boot_id(uint8_t address, uint16_t* boot_id)
+{
+    // Common checks for data access
+    esp_err_t error = _preflight(address);
+    if (error != ESP_OK)
+        return error;
+
+    // Get client entry and call intermediate method
+    dynI2C_client_entry_t& client_entry = client_entries.at(address);
+    uint8_t bytes[2];
+    error = _get_client_boot_id(client_entry, bytes);
+    if (error != ESP_OK)
+        return error;
+
+    // Write bytes into uint16
+    *boot_id = (bytes[0] << 8) | bytes[1];
+    return ESP_OK;
+}
+
+
+esp_err_t DynI2CMaster::get_version(uint8_t address, uint8_t* major, uint8_t* minor, uint8_t* patch)
+{
+    // Common checks for data access
+    esp_err_t error = _preflight(address);
+    if (error != ESP_OK)
+        return error;
+
+    // Get client entry and call intermediate method
+    dynI2C_client_entry_t& client_entry = client_entries.at(address);
+    uint8_t bytes[3];
+    error = _get_client_version(client_entry, bytes);
+    if (error != ESP_OK)
+        return error;
+
+    // Write bytes into uint16
+    *major = bytes[0];
+    *minor = bytes[1];
+    *patch = bytes[2];
+    return ESP_OK;
+}
+
+esp_err_t DynI2CMaster::get_metadata(uint8_t address, uint8_t key, dynI2C_metadata_t* metadata)
+{
+    if (metadata == nullptr)
+        return ESP_ERR_INVALID_ARG;
+
+    // Common checks for data access
+    esp_err_t error = _preflight(address);
+    if (error != ESP_OK)
+        return error;
+
+    // Get entry and check if there is metadata in the entry for the wanted key
+    dynI2C_client_entry_t& client_entry = client_entries.at(address);
+    auto meta_it = client_entry.metadata.find(key);
+    if (meta_it != client_entry.metadata.end())
+    {
+        // Key was found so just return the cached metadata
+        *metadata = meta_it->second;
         return ESP_OK;
     }
 
-    ESP_LOGE(TAG, "Continuous checksum mismatch. Reached maximum retries.");
-    return ESP_ERR_INVALID_RESPONSE;
+    ESP_LOGD(TAG, "Metadata not cached, accessing client...");
+    error = _get_metadata_from_client(client_entry, key, metadata);
+    if (error != ESP_OK)
+        return error;
+
+    // Only if the dynamic size flag is not set, we cache the response metadata
+    if (!(metadata->data_flags & DYNAMIC_FLAG))
+        client_entry.metadata[key] = *metadata;
+
+    return ESP_OK;
 }

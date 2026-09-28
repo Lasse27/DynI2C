@@ -84,13 +84,7 @@ inline uint8_t calculate_crc8(dynI2C_setdata_packet_t packet)
  */
 inline dynI2C_getmeta_packet_t build_getmeta_packet(uint8_t key)
 {
-    dynI2C_getmeta_packet_t packet = {
-        .header = {
-            .magic = DYNI2C_MAGIC_NUMBER,
-            .packet_type = GETMETA,
-        },
-        .data_key = key,
-    };
+    dynI2C_getmeta_packet_t packet = { .data_key = key };
     packet.crc_checksum = calculate_crc8(packet);
     return packet;
 }
@@ -100,13 +94,7 @@ inline dynI2C_getmeta_packet_t build_getmeta_packet(uint8_t key)
 /// @return A struct of type dynI2C_getdata_packet_t
 inline dynI2C_getdata_packet_t build_getdata_packet(uint8_t key)
 {
-    dynI2C_getdata_packet_t packet = {
-        .header = {
-            .magic = DYNI2C_MAGIC_NUMBER,
-            .packet_type = GETDATA,
-        },
-        .data_key = key,
-    };
+    dynI2C_getdata_packet_t packet = { .data_key = key, };
     packet.crc_checksum = calculate_crc8(packet);
     return packet;
 }

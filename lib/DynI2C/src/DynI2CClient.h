@@ -14,36 +14,35 @@
 #include <esp_err.h>
 #include "DynI2CCommon.h"
 
-#define DYNI2C_CLIENT_MAX_REGISTERS 256
-#define DYNI2C_CLIENT_FIRST_USER_REG 0x06
+ // Common constants (these are the same for all DynI2C Clients)
+#define DYNI2C_CLIENT_MAX_REGISTERS     0xFF
+#define DYNI2C_CLIENT_FIRST_USER_REG    0x06
 
-typedef enum : uint8_t
-{
-    DYNI2C_CLIENT_REGISTER_ID = 0x00,
-    DYNI2C_CLIENT_REGISTER_VERSION = 0x01,
-    DYNI2C_CLIENT_REGISTER_BOOTID = 0x02,
-    DYNI2C_CLIENT_REGISTER_STATUS = 0x03,
-    DYNI2C_CLIENT_REGISTER_ERROR = 0x04,
-    DYNI2C_CLIENT_REGISTER_COUNT = 0x05,
-} dyni2c_client_registers_t;
+// System registers (these are the same for all DynI2C Clients)
+#define DYNI2C_CLIENT_REGISTER_ID       0x00
+#define DYNI2C_CLIENT_REGISTER_VERSION  0x01
+#define DYNI2C_CLIENT_REGISTER_BOOTID   0x02
+#define DYNI2C_CLIENT_REGISTER_STATUS   0x03
+#define DYNI2C_CLIENT_REGISTER_ERROR    0x04
+#define DYNI2C_CLIENT_REGISTER_COUNT    0x05
 
-typedef enum : uint8_t
-{
-    DYNI2C_CLIENT_STATUS_IDLE = 0x00,
-    DYNI2C_CLIENT_STATUS_BUSY = 0x01,
-    DYNI2C_CLIENT_STATUS_ERROR = 0x02,
-} dyni2c_client_status_t;
+// Status codes read from status register (these are the same for all DynI2C Clients)
+#define DYNI2C_CLIENT_STATUS_ERROR      0x00
+#define DYNI2C_CLIENT_STATUS_IDLE       0x01
+#define DYNI2C_CLIENT_STATUS_BUSY       0x02
+#define DYNI2C_CLIENT_STATUS_READY      0x03
 
-typedef enum : uint8_t
-{
-    DYNI2C_CLIENT_ERROR_NONE = 0x00,
-    DYNI2C_CLIENT_ERROR_INVALID_CMD = 0x01,
-    DYNI2C_CLIENT_ERROR_INVALID_REG = 0x02,
-    DYNI2C_CLIENT_ERROR_TIMEOUT = 0x03,
-    DYNI2C_CLIENT_ERROR_INTERNAL = 0x04,
-    DYNI2C_CLIENT_ERROR_BUSY = 0x05,
-} dyni2c_client_error_t;
+// Error codes read from status register (these are the same for all DynI2C Clients)
+#define DYNI2C_CLIENT_ERROR_NONE        0x00
+#define DYNI2C_CLIENT_ERROR_INVALID_CMD 0x01
+#define DYNI2C_CLIENT_ERROR_INVALID_REG 0x02
+#define DYNI2C_CLIENT_ERROR_TIMEOUT     0x03
+#define DYNI2C_CLIENT_ERROR_INTERNAL    0x04
+#define DYNI2C_CLIENT_ERROR_BUSY        0x05
 
+/**
+ * @brief Configuration structure for initialization of `DynI2CClient`.
+ */
 typedef struct
 {
 
@@ -56,12 +55,14 @@ typedef struct
     uint8_t* data;
 } dyni2c_client_reg_t;
 
+/**
+ * @brief Client object of the DynI2C Interaction.
+ */
 class DynI2CClient
 {
 public:
     DynI2CClient() = default;
     ~DynI2CClient() { deinit(); }
-
     DynI2CClient(const DynI2CClient&) = delete; // Prohibit copy because of references
     DynI2CClient& operator=(const DynI2CClient&) = delete; // Prohibit copy because of references
 
@@ -73,8 +74,8 @@ public:
     esp_err_t get_register_meta(uint8_t key, uint8_t& data_flags, uint16_t& data_len) const;
     esp_err_t get_register_data(uint8_t key, uint16_t buffer_size, uint8_t* buffer, uint16_t& buffer_len) const;
 
-    esp_err_t set_error(dyni2c_client_error_t error);
-    esp_err_t set_status(dyni2c_client_status_t status);
+    esp_err_t set_error(uint8_t error);
+    esp_err_t set_status(uint8_t status);
 
 
 private:

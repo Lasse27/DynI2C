@@ -12,23 +12,22 @@
 #include <map>
 #include <vector>
 #include "DynI2CCommon.h"
+#include "DynI2CClient.h"
 
 #define I2C_MASTER_TX_BUF_DISABLE 0 /* I2C master doesn't need buffer */
 #define I2C_MASTER_RX_BUF_DISABLE 0 /* I2C master doesn't need buffer */
 
 // Default values for DYNI2C_master_cfg_t
-#define DEFAULT_DYNI2C_PORT I2C_NUM_0
-#define DEFAULT_DYNI2C_SDA_IO GPIO_NUM_6
-#define DEFAULT_DYNI2C_SCL_IO GPIO_NUM_7
-#define DEFAULT_DYNI2C_PORT I2C_NUM_0
-#define DEFAULT_DYNI2C_CLK_SRC I2C_CLK_SRC_DEFAULT
-#define DEFAULT_DYNI2C_GLITCH_IGNORE 7
-#define DEFAULT_DYNI2C_INTERNAL_PULLUP true
-#define DEFAULT_DYNI2C_INTR_PRIORITY 0
-#define DEFAULT_DYNI2C_TRANS_QUEUE_DEPTH 2
-
-#define DEFAULT_DYNI2C_SCL_SPEED_HZ 400000
-#define DEFAULT_DYNI2C_TIMEOUT_MS 1000
+#define DYNI2C_MASTER_DEFAULT_PORT              I2C_NUM_0
+#define DYNI2C_MASTER_DEFAULT_SDA_GPIO          GPIO_NUM_6
+#define DYNI2C_MASTER_DEFAULT_SCL_GPIO          GPIO_NUM_7
+#define DYNI2C_MASTER_DEFAULT_CLK_SRC           I2C_CLK_SRC_DEFAULT
+#define DYNI2C_MASTER_DEFAULT_GLITCH_IGNORE     7
+#define DYNI2C_MASTER_DEFAULT_INTERNAL_PULLUP   true
+#define DYNI2C_MASTER_DEFAULT_INTR_PRIORITY     0
+#define DYNI2C_MASTER_DEFAULT_TRANS_QUEUE_DEPTH 2
+#define DYNI2C_MASTER_DEFAULT_SCL_SPEED_HZ      400000
+#define DYNI2C_MASTER_DEFAULT_TIMEOUT_MS        1000
 
 /// @brief Represents configuration parameters for a DynI2CMaster class.
 typedef struct
@@ -53,44 +52,66 @@ typedef struct
 dynI2C_master_cfg_t default_dynI2C_master_cfg()
 {
     dynI2C_master_cfg_t config;
-    config.i2c_port = DEFAULT_DYNI2C_PORT;
-    config.sda_gpio_num = DEFAULT_DYNI2C_SDA_IO;
-    config.scl_gpio_num = DEFAULT_DYNI2C_SCL_IO;
-    config.clk_source = DEFAULT_DYNI2C_CLK_SRC;
-    config.scl_speed_hz = DEFAULT_DYNI2C_SCL_SPEED_HZ;
-    config.timeout_ms = DEFAULT_DYNI2C_TIMEOUT_MS;
-    config.glitch_ignore_cnt = DEFAULT_DYNI2C_GLITCH_IGNORE;
-    config.use_internal_pullup = DEFAULT_DYNI2C_INTERNAL_PULLUP;
-    config.intr_priority = DEFAULT_DYNI2C_INTR_PRIORITY;
-    config.trans_queue_depth = DEFAULT_DYNI2C_TRANS_QUEUE_DEPTH;
+    config.i2c_port = DYNI2C_MASTER_DEFAULT_PORT;
+    config.sda_gpio_num = DYNI2C_MASTER_DEFAULT_SDA_GPIO;
+    config.scl_gpio_num = DYNI2C_MASTER_DEFAULT_SCL_GPIO;
+    config.clk_source = DYNI2C_MASTER_DEFAULT_CLK_SRC;
+    config.scl_speed_hz = DYNI2C_MASTER_DEFAULT_SCL_SPEED_HZ;
+    config.timeout_ms = DYNI2C_MASTER_DEFAULT_TIMEOUT_MS;
+    config.glitch_ignore_cnt = DYNI2C_MASTER_DEFAULT_GLITCH_IGNORE;
+    config.use_internal_pullup = DYNI2C_MASTER_DEFAULT_INTERNAL_PULLUP;
+    config.intr_priority = DYNI2C_MASTER_DEFAULT_INTR_PRIORITY;
+    config.trans_queue_depth = DYNI2C_MASTER_DEFAULT_TRANS_QUEUE_DEPTH;
+    return config;
 }
 
 /// @brief Represents a map entry for a DynI2C Client of this DynI2CMaster
 typedef struct
 {
     i2c_master_dev_handle_t device_handle;
-    std::map<uint8_t, dynI2C_meta_t> metadata;
+    std::map<uint8_t, dynI2C_metadata_t> metadata;
 } dynI2C_client_entry_t;
 
 class DynI2CMaster
 {
 public:
     ~DynI2CMaster();
-    void init(dynI2C_master_cfg_t config);
+    void init(const dynI2C_master_cfg_t& config);
     void deinit();
-    esp_err_t get_meta(uint8_t address, uint8_t key, dynI2C_meta_t& metadata);
-    esp_err_t get_data(uint8_t address, uint8_t key, std::vector<uint8_t>& data);
-    esp_err_t get_data(uint8_t address, uint8_t key, dynI2C_meta_t metadata, std::vector<uint8_t>& data);
-    esp_err_t register_client(uint8_t address);
+
+    // Top level methods
+    esp_err_t get_id(uint8_t address, uint8_t* device_id);
+    esp_err_t get_error(uint8_t address, uint8_t* error_code);
+    esp_err_t get_status(uint8_t address, uint8_t* status);
+    esp_err_t get_boot_id(uint8_t address, uint16_t* boot_id);
+    esp_err_t get_version(uint8_t address, uint8_t* major, uint8_t* minor, uint8_t* patch);
+    esp_err_t get_register_count(uint8_t address, uint8_t* register_count);
 
 private:
     bool initialized;
     dynI2C_master_cfg_t config;
     i2c_master_bus_handle_t i2c_bus_handle;
     std::map<uint8_t, dynI2C_client_entry_t> client_entries;
-    esp_err_t register_i2c_device(uint8_t address, i2c_master_dev_handle_t* device_handle);
-    esp_err_t transceive_metadata_with_client(i2c_master_dev_handle_t device_handle, uint8_t key, dynI2C_meta_t& metadata);
-    esp_err_t transceive_data_with_client(i2c_master_dev_handle_t device_handle, uint8_t key, dynI2C_meta_t& metadata, std::vector<uint8_t>& data);
+
+    // Base methods
+    esp_err_t _register_client(uint8_t address);
+    esp_err_t _register_i2c_device(uint8_t address, i2c_master_dev_handle_t* device_handle);
+    
+    esp_err_t _transmit_getmeta_to_client(const dynI2C_client_entry_t& client, uint8_t key);
+    esp_err_t _receive_metadata_from_client(const dynI2C_client_entry_t& client, dynI2C_metadata_t* metadata);
+    esp_err_t _get_metadata_from_client(const dynI2C_client_entry_t& client, uint8_t data_key, dynI2C_metadata_t* metadata, uint8_t max_retries, uint8_t delay_ms);
+
+    esp_err_t _transmit_getdata_to_client(const dynI2C_client_entry_t& client, uint8_t key);
+    esp_err_t _receive_data_from_client(const dynI2C_client_entry_t& client, uint16_t data_len, std::vector<uint8_t>& data);
+    esp_err_t _get_data_from_client(const dynI2C_client_entry_t& client, uint8_t data_key, uint16_t data_len, std::vector<uint8_t>& data, uint8_t max_retries, uint8_t delay_ms);
+
+    // Intermediate methods
+    esp_err_t _get_client_id(const dynI2C_client_entry_t& client, uint8_t* id);
+    esp_err_t _get_client_error(const dynI2C_client_entry_t& client, uint8_t* error);
+    esp_err_t _get_client_status(const dynI2C_client_entry_t& client, uint8_t* status);
+    esp_err_t _get_client_register_count(const dynI2C_client_entry_t& client, uint8_t* count);
+    esp_err_t _get_client_version(const dynI2C_client_entry_t& client, uint8_t* boot_id);
+    esp_err_t _get_client_boot_id(const dynI2C_client_entry_t& client, uint8_t* boot_id);
 };
 
 #endif // DYNI2C_MASTER_H
