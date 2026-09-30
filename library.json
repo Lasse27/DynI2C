@@ -8,9 +8,9 @@
         "maintainer": true
     },
     "license": "MIT License",
-    "homepage": "https://github.com/Lasse27/ModCon",
+    "homepage": "https://github.com/Lasse27/DynI2C",
     "repository": {
         "type": "git",
-        "url": "https://github.com/Lasse27/ModCon.git"
+        "url": "https://github.com/Lasse27/DynI2C.git"
     }
 }

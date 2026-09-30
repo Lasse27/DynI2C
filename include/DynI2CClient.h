@@ -53,6 +53,7 @@ typedef struct
     uint8_t data_flags;
     uint16_t data_len;
     uint8_t* data;
+
 } dyni2c_client_reg_t;
 
 /**
@@ -63,8 +64,8 @@ class DynI2CClient
 public:
     DynI2CClient() = default;
     ~DynI2CClient() { deinit(); }
-    DynI2CClient(const DynI2CClient&) = delete; // Prohibit copy because of references
-    DynI2CClient& operator=(const DynI2CClient&) = delete; // Prohibit copy because of references
+    DynI2CClient(const DynI2CClient&) = delete; // Prohibit copy
+    DynI2CClient& operator=(const DynI2CClient&) = delete; // Prohibit copy
 
     void init(dyni2c_client_cfg_t config);
     void deinit();

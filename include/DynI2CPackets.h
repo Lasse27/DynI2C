@@ -78,9 +78,9 @@ typedef struct __attribute__((packed))
 {
     uint8_t magic = DYNI2C_MAGIC_NUMBER;
     uint8_t packet_type = DYNI2C_PACKET_TYPE_SETDATA;
-    uint8_t data_key;       // Key whose data is being send
-    uint16_t data_len;     // Contained data
-    uint8_t crc_checksum;
+    uint8_t data_key = 0;      // Key whose data is being send
+    uint16_t data_len = 0;     // Length of upcoming data
+    uint8_t crc_checksum = 0;
 } dynI2C_setdata_packet_t;
 
 

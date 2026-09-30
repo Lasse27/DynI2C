@@ -75,7 +75,7 @@ esp_err_t DynI2CClient::set_register_data(uint8_t key, uint16_t data_len, uint8_
     // Check wether the data_len is the same
     if (data_len != reg.data_len)
     {
-        if (!(reg.data_flags & (DYNAMIC_FLAG)))
+        if (!(reg.data_flags & (DYNI2C_FLAG_NO_CACHE)))
         {
             return ESP_ERR_INVALID_ARG;
         }
